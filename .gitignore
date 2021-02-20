@@ -1,4 +1,5 @@
 /bin
 knut
 .code-workspace
+*.swp
 builddoc

@@ -1,4 +1,4 @@
-// Copyright 2020 Silvio Böhler
+// Copyright 2021 Silvio Böhler
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,33 @@
 
 package report
 
-type Renderer interface {
-	Render(r *Report)
+import (
+	//"github.com/sboehler/knut/lib/model/accounts"
+	//"github.com/sboehler/knut/lib/model/commodities"
+	//"github.com/sboehler/knut/lib/vector"
+)
+
+type CsvRenderer struct {
+	Commoditites bool
+	negate bool
+	report *Report
+	sheet *Sheet
 }
 
+type Sheet struct {
+	rows []row
+}
+
+type row []string
+
+func (cr *CsvRenderer) Render(r *Report) {
+	cr.report = r
+}
+
+func (cr *CsvRenderer) GetSheet() *Sheet {
+	return cr.sheet
+}
+
+func (cr *CsvRenderer) String() string {
+	return `TEST`
+}

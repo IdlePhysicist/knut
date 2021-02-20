@@ -70,6 +70,7 @@ func CreateCmd() *cobra.Command {
 	c.Flags().Int32("digits", 0, "round to number of digits")
 	c.Flags().BoolP("thousands", "k", false, "show numbers in units of 1000")
 	c.Flags().Bool("color", false, "print output in color")
+	c.Flags().Bool("csv", false, "render balance sheet as csv")
 	return c
 }
 
@@ -186,12 +187,16 @@ func configurePipeline(cmd *cobra.Command, args []string) (*pipeline, error) {
 	if err != nil {
 		return nil, err
 	}
+	csv, err := cmd.Flags().GetBool("csv")
+	if err != nil {
+		return nil, err
+	}
 
-	var (
-		journal = journal.Journal{
+	ppl := pipeline{
+		Journal: journal.Journal{
 			File: args[0],
-		}
-		balanceBuilder = balance.Builder{
+		},
+		BalanceBuilder: balance.Builder{
 			From:      from,
 			To:        to,
 			Period:    period,
@@ -199,32 +204,30 @@ func configurePipeline(cmd *cobra.Command, args []string) (*pipeline, error) {
 			Valuation: valuation,
 			Close:     close,
 			Diff:      diff,
-		}
-		ledgerFilter = ledger.Filter{
+		},
+		LedgerFilter: ledger.Filter{
 			CommoditiesFilter: filterCommoditiesRegex,
 			AccountsFilter:    filterAccountsRegex,
-		}
-		reportBuilder = report.Builder{
+		},
+		ReportBuilder: report.Builder{
 			Value:    valuation != nil,
 			Collapse: collapse,
-		}
-		reportRenderer = report.Renderer{
-			Commodities: showCommodities || valuation == nil,
-		}
-		tableRenderer = table.TextRenderer{
+		},
+		TextRenderer: table.TextRenderer{
 			Color:     color,
 			Thousands: thousands,
 			Round:     digits,
+		},
+	}
+
+	if csv {
+		ppl.ReportRenderer = &report.CsvRenderer{}
+	} else {
+		ppl.ReportRenderer = &report.TableRenderer{
+			Commodities: showCommodities || valuation == nil,
 		}
-	)
-	return &pipeline{
-		Journal:        journal,
-		LedgerFilter:   ledgerFilter,
-		BalanceBuilder: balanceBuilder,
-		ReportBuilder:  reportBuilder,
-		ReportRenderer: reportRenderer,
-		TextRenderer:   tableRenderer,
-	}, nil
+	}
+	return &ppl, nil
 }
 
 func processPipeline(w io.Writer, ppl *pipeline) error {
@@ -243,7 +246,16 @@ func processPipeline(w io.Writer, ppl *pipeline) error {
 	if r, err = ppl.ReportBuilder.Build(bal); err != nil {
 		return err
 	}
-	return ppl.TextRenderer.Render(ppl.ReportRenderer.Render(r), w)
+	ppl.ReportRenderer.Render(r)
+
+	switch ppl.ReportRenderer.(type) {
+	case *report.TableRenderer:
+		err = ppl.TextRenderer.Render(ppl.ReportRenderer.(*report.TableRenderer).GetTable(), w)
+	case *report.CsvRenderer:
+		_, err = io.WriteString(w, ppl.ReportRenderer.(*report.CsvRenderer).String())
+	}
+
+	return err
 }
 
 func parseValuation(cmd *cobra.Command, name string) (*commodities.Commodity, error) {
